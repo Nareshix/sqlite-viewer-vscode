@@ -1,71 +1,72 @@
-# monaco-hello README
+Some ideas
+<img width="1440" height="1040" alt="image" src="https://github.com/user-attachments/assets/f42b6d0f-edd8-4db9-becd-9bd75cf8940a" />
 
-This is the README for your extension "monaco-hello". After writing up a brief description, we recommend including the following sections.
 
-## Features
+<img width="1440" height="1120" alt="image" src="https://github.com/user-attachments/assets/72f0822d-19a9-430f-98e7-83198de08ec9" />
+<img width="1440" height="1160" alt="image" src="https://github.com/user-attachments/assets/b1fd781f-ca2a-4af0-92e4-49511b65c800" />
+<img width="1440" height="1160" alt="image" src="https://github.com/user-attachments/assets/1fc42489-84dd-4b3f-bb61-2875f9179813" />
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
 
-For example if there is an image subfolder under your extension project workspace:
+some interesting ideas
+FK navigation — when you're browsing orders and see user_id = 1042, clicking that value jumps you directly to the users table and highlights the row where id = 1042. You follow the relationship without writing a JOIN. That's FK navigation — treating foreign key values as clickable links rather than dead numbers.
 
-\!\[feature X\]\(images/feature-x.png\)
+```ts
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>monaco sql test</title>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1e1e1e; }
+    #editor { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+<div id="editor"></div>
+<script type="module">
+import { init } from "https://esm.sh/modern-monaco@0.4.1";
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+const monaco = await init({ defaultTheme: "dark-plus" });
 
-## Requirements
+const editor = monaco.editor.create(document.getElementById("editor"), {
+  language: "sql",
+  fontSize: 15,
+  value: "SELECT * FROM users WHERE id = 1;\n",
+  automaticLayout: true,  // handles resize automatically
+});
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+// SQL keyword completions
+const SQL_KEYWORDS = [
+  "SELECT","FROM","WHERE","JOIN","LEFT JOIN","RIGHT JOIN","INNER JOIN","OUTER JOIN",
+  "ON","AS","AND","OR","NOT","IN","EXISTS","BETWEEN","LIKE","IS NULL","IS NOT NULL",
+  "GROUP BY","ORDER BY","HAVING","LIMIT","OFFSET","DISTINCT","ALL","UNION","UNION ALL",
+  "INSERT INTO","VALUES","UPDATE","SET","DELETE FROM","CREATE TABLE","DROP TABLE",
+  "ALTER TABLE","ADD COLUMN","DROP COLUMN","PRIMARY KEY","FOREIGN KEY","REFERENCES",
+  "UNIQUE","NOT NULL","DEFAULT","COUNT","SUM","AVG","MIN","MAX","COALESCE","NULLIF",
+  "CASE","WHEN","THEN","ELSE","END","CAST","NOW","CONCAT","LENGTH","UPPER","LOWER",
+  "TRIM","SUBSTRING","REPLACE","ROUND","FLOOR","CEIL","ABS","IFNULL",
+];
 
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+monaco.languages.registerCompletionItemProvider("sql", {
+  provideCompletionItems(model, position) {
+    const word = model.getWordUntilPosition(position);
+    const range = {
+      startLineNumber: position.lineNumber,
+      endLineNumber: position.lineNumber,
+      startColumn: word.startColumn,
+      endColumn: word.endColumn,
+    };
+    return {
+      suggestions: SQL_KEYWORDS.map(kw => ({
+        label: kw,
+        kind: monaco.languages.CompletionItemKind.Keyword,
+        insertText: kw,
+        range,
+      })),
+    };
+  },
+});
+</script>
+</body>
+</html>
+```

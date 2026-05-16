@@ -2,6 +2,11 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// Import the Rust Native Module we created.
+// Because we marked this as 'external' in esbuild.js, VS Code will safely
+// require() the native binary at runtime without bundling errors.
+import { Database } from '../backend';
+
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('monaco-hello.open', () => {
@@ -33,6 +38,42 @@ export function activate(context: vscode.ExtensionContext) {
       );
 
       panel.webview.html = html;
+
+      try {
+        // 1. Initialize the Rust sqlitex Database (using in-memory for testing)
+        const db = new Database(":memory:");
+
+        // 2. Setup some dummy data so you can immediately test queries in Monaco
+        db.query("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, email TEXT);");
+        db.query("INSERT INTO users (username, email) VALUES ('naresh', 'naresh@example.com');");
+        db.query("INSERT INTO users (username, email) VALUES ('alice', 'alice@example.com');");
+
+        // 3. Listen for messages coming from the Svelte webview
+        panel.webview.onDidReceiveMessage(message => {
+
+          if (message.command === 'runSql') {
+            try {
+              // Pass the SQL text to the Rust backend
+              const jsonResult = db.query(message.text);
+
+              // Parse the stringified JSON array coming from Rust
+              const data = JSON.parse(jsonResult);
+
+              // Send the parsed rows back to the Svelte Webview
+              panel.webview.postMessage({ command: 'sqlResult', data });
+
+            } catch (err: any) {
+              // Catch syntax errors or DB errors and send them back to the UI
+              panel.webview.postMessage({ command: 'sqlError', error: err.message });
+            }
+          }
+
+        });
+
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Failed to initialize Database: ${err.message}`);
+      }
+
     })
   );
 }

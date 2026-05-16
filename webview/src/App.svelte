@@ -4,6 +4,23 @@
   import 'monaco-editor/esm/vs/editor/editor.all.js';
   import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 
+  // 1. Declare VS Code API to avoid TypeScript errors
+  declare function acquireVsCodeApi(): any;
+  let vscode: any;
+
+  try {
+    vscode = acquireVsCodeApi();
+  } catch (e) {
+    // Fallback if testing outside VS Code
+    vscode = { postMessage: () => {} };
+  }
+
+  // 2. Reactive state variables for the UI
+  let results: any[] = $state([]);
+  let columns: string[] = $state([]);
+  let errorMessage: string | null = $state(null);
+  let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
+
   self.MonacoEnvironment = {
     getWorker() {
       return new editorWorker();
@@ -15,6 +32,25 @@
   ];
 
   let editorContainer: HTMLDivElement;
+
+  // 3. Function to send query to the backend
+  function runQuery() {
+    if (!editorInstance) return;
+
+    // Get the selected text, or the whole text if nothing is highlighted
+    const selection = editorInstance.getSelection();
+    let text = editorInstance.getModel()?.getValueInRange(selection!) || '';
+    if (!text.trim()) {
+      text = editorInstance.getValue();
+    }
+
+    errorMessage = null; // Clear previous errors
+
+    vscode.postMessage({
+      command: 'runSql',
+      text: text
+    });
+  }
 
   onMount(() => {
     monaco.languages.register({ id: 'sqlite-custom' });
@@ -42,11 +78,11 @@
           endColumn: word.endColumn
         };
 
-        const keywordSuggestions: monaco.languages.CompletionItem[] = SQLITE_KEYWORDS.map(k => ({
+        const keywordSuggestions = SQLITE_KEYWORDS.map(k => ({
           label: k, kind: monaco.languages.CompletionItemKind.Keyword, insertText: k, range
         }));
 
-        const snippetSuggestions: monaco.languages.CompletionItem[] =[
+        const snippetSuggestions =[
           {
             label: 'SELECT ... FROM ...',
             kind: monaco.languages.CompletionItemKind.Snippet,
@@ -67,7 +103,7 @@
       }
     });
 
-    const editor = monaco.editor.create(editorContainer, {
+    editorInstance = monaco.editor.create(editorContainer, {
       value: '-- Custom SQLite Editor\nSELECT * FROM users;\n',
       language: 'sqlite-custom',
       theme: 'vs-dark',
@@ -76,28 +112,82 @@
       wordBasedSuggestions: 'off'
     });
 
+    // Bind Ctrl+Enter (Cmd+Enter on Mac) to run the query inside Monaco
+    editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runQuery);
+
+    // 4. Listen for the results coming back from VS Code Extension Host
+    const messageHandler = (event: MessageEvent) => {
+      const message = event.data;
+
+      if (message.command === 'sqlResult') {
+        results = message.data || [];
+        // Extract column names dynamically from the first row
+        columns = results.length > 0 ? Object.keys(results[0]) : [];
+      } else if (message.command === 'sqlError') {
+        errorMessage = message.error;
+        results = [];
+        columns = [];
+      }
+    };
+
+    window.addEventListener('message', messageHandler);
+
     return () => {
-      editor.dispose();
+      editorInstance?.dispose();
       sqliteProvider.dispose();
+      window.removeEventListener('message', messageHandler);
     };
   });
 </script>
 
 <style>
   .layout-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; color: #ccc; font-family: sans-serif; }
-  .editor-pane { flex: 1; min-height: 0; }
-  .results-pane { flex: 1; background: #1e1e1e; border-top: 1px solid #444; overflow: auto; padding: 10px; }
-  table { width: 100%; border-collapse: collapse; font-family: monospace; }
-  th, td { border: 1px solid #444; padding: 8px; text-align: left; }
-  th { background: #2d2d2d; color: #fff; }
+  .editor-pane { flex: 1; min-height: 0; position: relative; }
+  .results-pane { flex: 1; background: #1e1e1e; border-top: 1px solid #444; overflow: auto; padding: 10px; display: flex; flex-direction: column;}
+
+  table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 13px; }
+  th, td { border: 1px solid #444; padding: 6px 10px; text-align: left; }
+  th { background: #2d2d2d; color: #fff; position: sticky; top: 0; }
+
+  .toolbar { padding-bottom: 10px; border-bottom: 1px solid #444; margin-bottom: 10px;}
+  button { background: #007acc; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 2px;}
+  button:hover { background: #005f9e; }
+
+  .error { color: #f48771; font-family: monospace; white-space: pre-wrap; padding: 10px; background: rgba(255,0,0,0.1); border: 1px solid #f48771; }
+  .empty-state { color: #888; font-style: italic; padding: 10px; }
 </style>
 
 <div class="layout-container">
   <div class="editor-pane" bind:this={editorContainer}></div>
   <div class="results-pane">
-    <table>
-      <thead><tr><th>id</th><th>username</th><th>email</th></tr></thead>
-      <tbody><tr><td>1</td><td>naresh</td><td>naresh@example.com</td></tr></tbody>
-    </table>
+    <div class="toolbar">
+      <button onclick={runQuery}>Run Query (Cmd+Enter)</button>
+    </div>
+
+    <!-- 5. Render Error or Table dynamically -->
+    {#if errorMessage}
+      <div class="error">{errorMessage}</div>
+    {:else if results.length > 0}
+      <table>
+        <thead>
+          <tr>
+            {#each columns as col}
+              <th>{col}</th>
+            {/each}
+          </tr>
+        </thead>
+        <tbody>
+          {#each results as row}
+            <tr>
+              {#each columns as col}
+                <td>{row[col] === null ? 'NULL' : row[col]}</td>
+              {/each}
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    {:else}
+      <div class="empty-state">No results to display.</div>
+    {/if}
   </div>
 </div>
