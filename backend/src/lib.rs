@@ -1,8 +1,8 @@
 #![deny(clippy::all)]
 
 use napi_derive::napi;
-use sqlitex::Connection;
 use sqlitex::traits::dynamic::Value;
+use sqlitex::Connection;
 use std::sync::Arc;
 
 #[napi]
@@ -26,7 +26,10 @@ impl Database {
   #[napi]
   pub fn query(&self, sql: String) -> napi::Result<String> {
     // Note: conn is an Arc, so we can call methods on it directly
-    let results = self.conn.query(&sql).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let results = self
+      .conn
+      .query(&sql)
+      .map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
     let mut rows_json = Vec::new();
     let col_names = results.column_names.clone();
