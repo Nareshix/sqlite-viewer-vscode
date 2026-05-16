@@ -161,7 +161,7 @@
   <div class="editor-pane" bind:this={editorContainer}></div>
   <div class="results-pane">
     <div class="toolbar">
-      <button onclick={runQuery}>Run Query (Cmd+Enter)</button>
+      <button onclick={runQuery}>Run Query</button>
     </div>
 
     <!-- 5. Render Error or Table dynamically -->
