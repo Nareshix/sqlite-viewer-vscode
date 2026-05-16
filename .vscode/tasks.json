@@ -1,15 +1,15 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "Build Webview and Extension",
-			"type": "npm",
-			"script": "build",
-			"problemMatcher": [],
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			}
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build All",
+      "type": "npm",
+      "script": "build",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
 }

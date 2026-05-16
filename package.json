@@ -30,7 +30,7 @@
   ]
 },
   "scripts": {
-    "build": "vite build && node esbuild.js",
+"build": "cd backend && napi build --platform --release && cd .. && vite build && node esbuild.js",
     "watch": "node esbuild.js --watch",
     "vscode:prepublish": "npm run build"
   },

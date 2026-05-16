@@ -29,25 +29,34 @@ class SQLiteEditorProvider implements vscode.CustomReadonlyEditorProvider {
     const htmlPath = path.join(webviewDir.fsPath, 'index.html');
     let html = fs.readFileSync(htmlPath, 'utf8');
     const webviewUri = webviewPanel.webview.asWebviewUri(webviewDir);
-    html = html.replace('<head>', `<head>\n    <base href="${webviewUri}/">`);
+    html = html.replace(/(<head.*?>)/i, `$1\n    <base href="${webviewUri}/">`);
     webviewPanel.webview.html = html;
 
     try {
       // Open the actual .db file instead of :memory:
       const db = new Database(document.uri.fsPath);
 
-      webviewPanel.webview.onDidReceiveMessage(message => {
-        if (message.command === 'runSql') {
-          try {
-            const jsonResult = db.query(message.text);
-            const data = JSON.parse(jsonResult);
-            webviewPanel.webview.postMessage({ command: 'sqlResult', data });
-          } catch (err: any) {
-            webviewPanel.webview.postMessage({ command: 'sqlError', error: err.message });
-          }
-        }
-      });
+webviewPanel.webview.onDidReceiveMessage(message => {
+  if (message.command === 'runSql') {
+    try {
+      const jsonResult = db.query(message.text);
+      const data = JSON.parse(jsonResult);
+      webviewPanel.webview.postMessage({ command: 'sqlResult', data });
+    } catch (err: any) {
+      webviewPanel.webview.postMessage({ command: 'sqlError', error: err.message });
+    }
+  }
 
+  if (message.command === 'getSchema') {
+    try {
+      const jsonResult = db.schema();
+      const schema = JSON.parse(jsonResult);
+      webviewPanel.webview.postMessage({ command: 'schemaResult', schema });
+    } catch (err: any) {
+      webviewPanel.webview.postMessage({ command: 'sqlError', error: err.message });
+    }
+  }
+});
     } catch (err: any) {
       vscode.window.showErrorMessage(`Failed to open database: ${err.message}`);
     }

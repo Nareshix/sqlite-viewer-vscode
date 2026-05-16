@@ -3,4 +3,5 @@
 export declare class Database {
   constructor(path: string)
   query(sql: string): string
+  schema(): string
 }
