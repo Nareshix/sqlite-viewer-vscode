@@ -9,16 +9,26 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+
+"activationEvents": [
+  "onLanguage:sqlite",
+  "workspaceContains:**/*.db",
+  "workspaceContains:**/*.sqlite"
+],
   "main": "./dist/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "monaco-hello.open",
-        "title": "Open Monaco Editor"
-      }
-    ]
-  },
+"contributes": {
+  "customEditors": [
+    {
+      "viewType": "monaco-hello.sqliteEditor",
+      "displayName": "Monaco SQLite Editor",
+      "selector": [
+        { "filenamePattern": "*.db" },
+        { "filenamePattern": "*.sqlite" }
+      ],
+      "priority": "default"
+    }
+  ]
+},
   "scripts": {
     "build": "vite build && node esbuild.js",
     "watch": "node esbuild.js --watch",
