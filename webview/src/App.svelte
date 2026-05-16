@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import * as monaco from 'monaco-editor';
+
+  import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+
+  import 'monaco-editor/esm/vs/editor/editor.all.js';
 
   import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 
   self.MonacoEnvironment = {
     getWorker() {
-      // We only need the basic editor worker now since we are making a custom language!
       return new editorWorker();
     }
   };
