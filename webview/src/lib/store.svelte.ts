@@ -1,4 +1,3 @@
-
 declare function acquireVsCodeApi(): any;
 
 let vscodeApi: any;
@@ -17,11 +16,13 @@ export type Tab = {
   results: any[];
   columns: string[];
   error: string | null;
+  timeMs: number | null;
+  isLoading: boolean;
 };
 
 class AppState {
   tabs: Tab[] = $state([
-    { id: '1', title: 'Query 1', query: '-- Open a table from the sidebar or write a query\n', results: [], columns: [], error: null }
+    { id: '1', title: 'Query 1', query: '-- Open a table from the sidebar or write a query\n', results: [], columns: [], error: null, timeMs: null, isLoading: false }
   ]);
   activeTabId: string = $state('1');
   schema: { tables: any[]; views: string[] } = $state({ tables: [], views: [] });
@@ -31,7 +32,8 @@ class AppState {
   isRestored = false;
   contextMenu = $state({ visible: false, x: 0, y: 0, tableName: '' });
 
-  // A hook for the editor component to register its execution method
+  queryStartTime: number = 0;
+
   executeRunQuery: () => void = () => {};
 
   get activeTab() {
@@ -45,7 +47,7 @@ class AppState {
   newTab() {
     this.tabCounter++;
     const id = String(this.tabCounter);
-    this.tabs.push({ id, title: `Query ${this.tabCounter}`, query: '-- Write a query\n', results: [], columns: [], error: null });
+    this.tabs.push({ id, title: `Query ${this.tabCounter}`, query: '-- Write a query\n', results: [], columns: [], error: null, timeMs: null, isLoading: false });
     this.switchTab(id);
   }
 
@@ -68,7 +70,7 @@ class AppState {
     }
     this.tabCounter++;
     const id = String(this.tabCounter);
-    this.tabs.push({ id, title: name, query, results: [], columns: [], error: null });
+    this.tabs.push({ id, title: name, query, results: [], columns: [], error: null, timeMs: null, isLoading: false });
     this.switchTab(id);
     setTimeout(() => this.executeRunQuery(), 0);
   }
