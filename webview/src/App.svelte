@@ -19,6 +19,7 @@
   let isRestored = false;
 
   let schema: { tables: any[], views: string[] } = $state({ tables: [], views: [] });
+let dbName: string = $state('');
   let expandedTables: Set<string> = $state(new Set());
 let searchQuery: string = $state('');
 let searchOpen: boolean = $state(false);
@@ -192,6 +193,9 @@ function toggleSearch() {
       theme: 'vs-dark',
       automaticLayout: true,
       minimap: { enabled: false },
+      overviewRulerLanes: 0,
+      overviewRulerBorder: false,
+      hideCursorInOverviewRuler: true,
       wordBasedSuggestions: 'off'
     });
 
@@ -228,6 +232,7 @@ function toggleSearch() {
         );
       } else if (message.command === 'schemaResult') {
         schema = message.schema;
+        dbName = message.dbName ?? '';
       } else if (message.command === 'runQuery') {
         runQuery();
       } else if (message.command === 'restoreState') {
@@ -266,7 +271,9 @@ function toggleSearch() {
 </script>
 
 <style>
-  .layout-container { display: flex; flex-direction: row; height: 100vh; width: 100vw; color: #ccc; font-family: sans-serif; }
+  .layout-container { display: flex; flex-direction: column; height: 100vh; width: 100vw; color: #ccc; font-family: sans-serif; }
+  .layout-body { display: flex; flex-direction: row; flex: 1; min-height: 0; }
+  .db-header { height: 1px; background: #333; flex-shrink: 0; }
 
   .main-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .editor-pane { flex: 1; min-height: 0; position: relative; }
@@ -301,6 +308,11 @@ function toggleSearch() {
   .view-row { padding: 4px 12px; font-size: 13px; color: #9cdcfe; cursor: pointer; }
   .view-row:hover { background: #2a2d2e; }
 
+  .db-header { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: #1e1e1e; border-bottom: 1px solid #333; font-size: 12px; color: #888; flex-shrink: 0; }
+  .db-name { flex: 1; color: #aaa; font-weight: 500; }
+  .db-close { color: #555; font-size: 16px; line-height: 1; cursor: pointer; padding: 0 3px; border-radius: 3px; }
+  .db-close:hover { color: #fff; background: #333; }
+
   table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 13px; }
   th, td { border: 1px solid #444; padding: 6px 10px; text-align: left; }
   th { background: #2d2d2d; color: #fff; position: sticky; top: 0; }
@@ -325,6 +337,10 @@ function toggleSearch() {
 </style>
 
 <div class="layout-container">
+
+  <div class="db-header"></div>
+
+  <div class="layout-body">
 
   <!-- left: editor + results -->
   <div class="main-pane">
@@ -430,6 +446,7 @@ function toggleSearch() {
 
     </div>
   </div>
+  </div> <!-- end layout-body -->
 
   {#if contextMenu.visible}
     <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px">
