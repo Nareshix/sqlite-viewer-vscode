@@ -20,8 +20,18 @@
 
   let schema: { tables: any[], views: string[] } = $state({ tables: [], views: [] });
   let expandedTables: Set<string> = $state(new Set());
-  let searchQuery: string = $state('');
+let searchQuery: string = $state('');
+let searchOpen: boolean = $state(false);
+let searchInput: HTMLInputElement | null = null;
 
+function toggleSearch() {
+  searchOpen = !searchOpen;
+  if (searchOpen) {
+    setTimeout(() => searchInput?.focus(), 0);
+  } else {
+    searchQuery = '';
+  }
+}
   let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
   let editorContainer: HTMLDivElement;
 
@@ -264,13 +274,15 @@
 
   /* sidebar */
   .sidebar { width: 240px; min-width: 240px; background: #1e1e1e; border-left: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
-  .sidebar-search { padding: 8px; border-bottom: 1px solid #333; }
-  .sidebar-search input { width: 100%; box-sizing: border-box; background: #2d2d2d; border: 1px solid #444; color: #ccc; padding: 5px 8px; font-size: 12px; border-radius: 3px; outline: none; }
-  .sidebar-search input:focus { border-color: #007acc; }
+  .search-icon { color: #666; cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 3px; line-height: 1; user-select: none; flex-shrink: 0; }
+  .search-icon:hover { color: #ccc; background: #2a2d2e; }
+  .search-icon.active { color: #007acc; }
+  .search-expand { padding: 4px 10px 6px; }
+  .search-expand input { width: 100%; box-sizing: border-box; background: #2d2d2d; border: 1px solid #444; color: #ccc; padding: 4px 7px; font-size: 12px; border-radius: 3px; outline: none; }
+  .search-expand input:focus { border-color: #007acc; }
   .sidebar-body { flex: 1; overflow-y: auto; padding: 8px 0; }
 
-  .section-header { padding: 4px 12px; font-size: 11px; font-weight: 600; color: #888; letter-spacing: 0.08em; text-transform: uppercase; display: flex; justify-content: space-between; }
-  .section-count { color: #555; }
+.section-header { padding: 4px 12px; font-size: 11px; font-weight: 600; color: #888; letter-spacing: 0.08em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }  .section-count { color: #555; }
 
   .table-row { display: flex; align-items: center; padding: 4px 8px 4px 12px; cursor: pointer; gap: 6px; }
   .table-row:hover { background: #2a2d2e; }
@@ -350,19 +362,30 @@
 
   <!-- right: sidebar -->
   <div class="sidebar">
-    <div class="sidebar-search">
-      <input
-        type="text"
-        placeholder="search tables..."
-        bind:value={searchQuery}
-      />
-    </div>
     <div class="sidebar-body">
 
       <!-- tables -->
       <div class="section-header">
-        Tables <span class="section-count">{schema.tables.length}</span>
+        <span>Tables <span class="section-count">{schema.tables.length}</span></span>
+        <span
+          class="search-icon"
+          class:active={searchOpen}
+          onclick={toggleSearch}
+          title={searchOpen ? 'Close search' : 'Search tables'}
+        >⌕</span>
       </div>
+
+      {#if searchOpen}
+        <div class="search-expand">
+          <input
+            bind:this={searchInput}
+            type="text"
+            placeholder="search tables..."
+            bind:value={searchQuery}
+            onkeydown={(e) => e.key === 'Escape' && toggleSearch()}
+          />
+        </div>
+      {/if}
 
       {#each filteredTables as table}
         <div
