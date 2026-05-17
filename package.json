@@ -9,28 +9,47 @@
   "categories": [
     "Other"
   ],
-
-"activationEvents": [
-  "onLanguage:sqlite",
-  "workspaceContains:**/*.db",
-  "workspaceContains:**/*.sqlite"
-],
+  "activationEvents": [
+    "onLanguage:sqlite",
+    "workspaceContains:**/*.db",
+    "workspaceContains:**/*.sqlite"
+  ],
   "main": "./dist/extension.js",
-"contributes": {
-  "customEditors": [
-    {
-      "viewType": "monaco-hello.sqliteEditor",
-      "displayName": "Monaco SQLite Editor",
-      "selector": [
-        { "filenamePattern": "*.db" },
-        { "filenamePattern": "*.sqlite" }
-      ],
-      "priority": "default"
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "monaco-hello.sqliteEditor",
+        "displayName": "Monaco SQLite Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.db"
+          },
+          {
+            "filenamePattern": "*.sqlite"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "monaco-hello.runQuery",
+        "title": "Run Query",
+        "icon": "$(play)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "monaco-hello.runQuery",
+          "when": "activeCustomEditorId == 'monaco-hello.sqliteEditor'",
+          "group": "navigation"
+        }
+      ]
     }
-  ]
-},
+  },
   "scripts": {
-"build": "cd backend && napi build --platform --release && cd .. && vite build && node esbuild.js",
+    "build": "cd backend && napi build --platform --release && cd .. && vite build && node esbuild.js",
     "watch": "node esbuild.js --watch",
     "vscode:prepublish": "npm run build"
   },
@@ -49,7 +68,8 @@
     "svelte": "^5.55.7",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^8.0.13"
+    "vite": "^8.0.13",
+    "vite-plugin-monaco-editor": "^1.1.0"
   },
   "dependencies": {
     "monaco-editor": "^0.43.0"

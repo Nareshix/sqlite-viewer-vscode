@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
 import * as monaco from 'monaco-editor';
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 
   declare function acquireVsCodeApi(): any;
   let vscode: any;
@@ -24,7 +23,6 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
   let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
   let editorContainer: HTMLDivElement;
 
-  self.MonacoEnvironment = { getWorker() { return new editorWorker(); } };
 
   const SQLITE_KEYWORDS = [
     "ABORT","ACTION","ADD","AFTER","ALL","ALTER","ALWAYS","ANALYZE","AND","AS","ASC","ATTACH",
@@ -147,6 +145,8 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
         columns = [];
       } else if (message.command === 'schemaResult') {
         schema = message.schema;
+      } else if (message.command === 'runQuery') {
+        runQuery();
       }
     };
 
@@ -181,9 +181,8 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
   .table-row:hover { background: #2a2d2e; }
   .table-name { flex: 1; font-size: 13px; color: #ccc; }
   .table-count { font-size: 11px; color: #666; }
-  .chevron { font-size: 10px; color: #555; width: 12px; transition: transform 0.15s; }
-  .chevron.open { transform: rotate(90deg); }
-
+.chevron { font-size: 15px; color: #555; width: 16px; display: inline-flex; align-items: center; justify-content: center; }
+.chevron.open { transform: rotate(90deg); }
   .column-list { padding: 0 0 4px 28px; }
   .column-item { display: flex; align-items: center; gap: 5px; padding: 2px 8px; font-size: 11px; color: #888; }
   .col-name { color: #bbb; }
@@ -199,9 +198,6 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
   table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 13px; }
   th, td { border: 1px solid #444; padding: 6px 10px; text-align: left; }
   th { background: #2d2d2d; color: #fff; position: sticky; top: 0; }
-  .toolbar { padding-bottom: 10px; border-bottom: 1px solid #444; margin-bottom: 10px; }
-  button { background: #007acc; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 2px; }
-  button:hover { background: #005f9e; }
   .error { color: #f48771; font-family: monospace; white-space: pre-wrap; padding: 10px; background: rgba(255,0,0,0.1); border: 1px solid #f48771; }
   .empty-state { color: #888; font-style: italic; padding: 10px; }
 </style>
@@ -212,9 +208,6 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
   <div class="main-pane">
     <div class="editor-pane" bind:this={editorContainer}></div>
     <div class="results-pane">
-      <div class="toolbar">
-        <button onclick={runQuery}>Run Query</button>
-      </div>
       {#if errorMessage}
         <div class="error">{errorMessage}</div>
       {:else if results.length > 0}

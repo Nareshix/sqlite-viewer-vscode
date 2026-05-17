@@ -3,6 +3,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { Database } from '../backend';
 
+let activePanel: vscode.WebviewPanel | null = null;
+
 class SQLiteEditorProvider implements vscode.CustomReadonlyEditorProvider {
 
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -31,6 +33,9 @@ class SQLiteEditorProvider implements vscode.CustomReadonlyEditorProvider {
     const webviewUri = webviewPanel.webview.asWebviewUri(webviewDir);
     html = html.replace(/(<head.*?>)/i, `$1\n    <base href="${webviewUri}/">`);
     webviewPanel.webview.html = html;
+    activePanel = webviewPanel;
+    webviewPanel.onDidDispose(() => { activePanel = null; });
+    webviewPanel.onDidChangeViewState(e => { if (e.webviewPanel.active) activePanel = webviewPanel; });
 
     try {
       // Open the actual .db file instead of :memory:
@@ -66,6 +71,11 @@ webviewPanel.webview.onDidReceiveMessage(message => {
 export function activate(context: vscode.ExtensionContext) {
   const provider = new SQLiteEditorProvider(context);
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('monaco-hello.runQuery', () => {
+      activePanel?.webview.postMessage({ command: 'runQuery' });
+    })
+  );
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
       'monaco-hello.sqliteEditor', // must match viewType in package.json
