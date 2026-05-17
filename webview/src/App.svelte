@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-import * as monaco from 'monaco-editor';
+  import * as monaco from 'monaco-editor';
 
   declare function acquireVsCodeApi(): any;
   let vscode: any;
@@ -10,12 +10,13 @@ import * as monaco from 'monaco-editor';
     vscode = { postMessage: () => {} };
   }
 
-type Tab = { id: string; title: string; query: string; results: any[]; columns: string[]; error: string | null; };
-let tabCounter = 1;
-let tabs: Tab[] = $state([{ id: '1', title: 'Query 1', query: '-- Open a table from the sidebar or write a query\n', results: [], columns: [], error: null }]);
-let activeTabId: string = $state('1');
-let activeTab = $derived(tabs.find(t => t.id === activeTabId)!);
-let contextMenu: { visible: boolean; x: number; y: number; tableName: string } = $state({ visible: false, x: 0, y: 0, tableName: '' });
+  type Tab = { id: string; title: string; query: string; results: any[]; columns: string[]; error: string | null; };
+  let tabCounter = 1;
+  let tabs: Tab[] = $state([{ id: '1', title: 'Query 1', query: '-- Open a table from the sidebar or write a query\n', results: [], columns: [], error: null }]);
+  let activeTabId: string = $state('1');
+  let activeTab = $derived(tabs.find(t => t.id === activeTabId)!);
+  let contextMenu: { visible: boolean; x: number; y: number; tableName: string } = $state({ visible: false, x: 0, y: 0, tableName: '' });
+  let isRestored = false;
 
   let schema: { tables: any[], views: string[] } = $state({ tables: [], views: [] });
   let expandedTables: Set<string> = $state(new Set());
@@ -23,7 +24,6 @@ let contextMenu: { visible: boolean; x: number; y: number; tableName: string } =
 
   let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
   let editorContainer: HTMLDivElement;
-
 
   const SQLITE_KEYWORDS = [
     "ABORT","ACTION","ADD","AFTER","ALL","ALTER","ALWAYS","ANALYZE","AND","AS","ASC","ATTACH",
@@ -102,18 +102,36 @@ let contextMenu: { visible: boolean; x: number; y: number; tableName: string } =
     contextMenu = { ...contextMenu, visible: false };
   }
 
-  // format row count: 1234 -> 1.2k
+  function saveState() {
+    if (!isRestored) return;
+
+    // Strip results and columns so we don't blow up the IPC message limit
+    // and VS Code's workspaceState size limit.
+    const cleanTabs = tabs.map(t => ({
+      id: t.id,
+      title: t.title,
+      query: t.query
+    }));
+
+    vscode.postMessage({ command: 'saveState', state: { tabs: cleanTabs, activeTabId, tabCounter } });
+  }
+
+  // Format row count: 1234 -> 1.2k
   function fmt(n: number): string {
     if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
     return String(n);
   }
-
 
   let filteredTables: any[] = $derived(
     schema.tables.filter((t: any) =>
       t.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
   );
+
+  $effect(() => {
+    tabs; activeTabId;
+    saveState();
+  });
 
   onMount(() => {
     monaco.languages.register({ id: 'sqlite-custom' });
@@ -168,37 +186,71 @@ let contextMenu: { visible: boolean; x: number; y: number; tableName: string } =
     });
 
     editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runQuery);
-editorInstance.onDidChangeModelContent(() => {
+
+    editorInstance.onDidChangeModelContent(() => {
       const val = editorInstance!.getValue();
       tabs = tabs.map(t => t.id === activeTabId ? { ...t, query: val } : t);
     });
-    // request schema immediately on load
+
+    // Request schema and tell VS Code we are ready to receive state
     vscode.postMessage({ command: 'getSchema' });
+    vscode.postMessage({ command: 'ready' });
+
+    // NOTE: isRestored is set only inside the 'restoreState' handler below,
+    // never via a setTimeout, so saveState() is a no-op until VS Code has
+    // sent us the persisted state (or confirmed there is none).
 
     const messageHandler = (event: MessageEvent) => {
       const message = event.data;
+
       if (message.command === 'sqlResult') {
         const data = message.data || [];
-        tabs = tabs.map(t => t.id === activeTabId ? { ...t, results: data, columns: data.length > 0 ? Object.keys(data[0]) : [] } : t);
+        tabs = tabs.map(t =>
+          t.id === activeTabId
+            ? { ...t, results: data, columns: data.length > 0 ? Object.keys(data[0]) : [] }
+            : t
+        );
       } else if (message.command === 'sqlError') {
-        tabs = tabs.map(t => t.id === activeTabId ? { ...t, error: message.error, results: [], columns: [] } : t);
+        tabs = tabs.map(t =>
+          t.id === activeTabId
+            ? { ...t, error: message.error, results: [], columns: [] }
+            : t
+        );
       } else if (message.command === 'schemaResult') {
         schema = message.schema;
       } else if (message.command === 'runQuery') {
         runQuery();
+      } else if (message.command === 'restoreState') {
+        if (message.state?.tabs) {
+          // Re-inject empty results/columns/error because we stripped them on save
+          tabs = message.state.tabs.map((t: any) => ({
+            ...t,
+            results: [],
+            columns: [],
+            error: null
+          }));
+          activeTabId = message.state.activeTabId;
+          tabCounter = message.state.tabCounter;
+
+          const tab = tabs.find((t: Tab) => t.id === activeTabId);
+          editorInstance?.setValue(tab?.query ?? '');
+        }
+
+        // Mark as restored and immediately sync the clean state back,
+        // discarding any corrupted/oversized state that was previously stored.
+        isRestored = true;
+        saveState();
       }
     };
 
     window.addEventListener('message', messageHandler);
     window.addEventListener('click', hideContextMenu);
 
-
     return () => {
       editorInstance?.dispose();
       sqliteProvider.dispose();
       window.removeEventListener('message', messageHandler);
-            window.removeEventListener('click', hideContextMenu);
-
+      window.removeEventListener('click', hideContextMenu);
     };
   });
 </script>
@@ -224,8 +276,8 @@ editorInstance.onDidChangeModelContent(() => {
   .table-row:hover { background: #2a2d2e; }
   .table-name { flex: 1; font-size: 13px; color: #ccc; }
   .table-count { font-size: 11px; color: #666; }
-.chevron { font-size: 15px; color: #555; width: 16px; display: inline-flex; align-items: center; justify-content: center; }
-.chevron.open { transform: rotate(90deg); }
+  .chevron { font-size: 15px; color: #555; width: 16px; display: inline-flex; align-items: center; justify-content: center; }
+  .chevron.open { transform: rotate(90deg); }
   .column-list { padding: 0 0 4px 28px; }
   .column-item { display: flex; align-items: center; gap: 5px; padding: 2px 8px; font-size: 11px; color: #888; }
   .col-name { color: #bbb; }
@@ -237,13 +289,13 @@ editorInstance.onDidChangeModelContent(() => {
   .view-row { padding: 4px 12px; font-size: 13px; color: #9cdcfe; cursor: pointer; }
   .view-row:hover { background: #2a2d2e; }
 
-  /* existing styles */
   table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 13px; }
   th, td { border: 1px solid #444; padding: 6px 10px; text-align: left; }
   th { background: #2d2d2d; color: #fff; position: sticky; top: 0; }
   .error { color: #f48771; font-family: monospace; white-space: pre-wrap; padding: 10px; background: rgba(255,0,0,0.1); border: 1px solid #f48771; }
   .empty-state { color: #888; font-style: italic; padding: 10px; }
- .tab-bar { display: flex; align-items: center; background: #1e1e1e; overflow-x: auto; flex-shrink: 0; }
+
+  .tab-bar { display: flex; align-items: center; background: #1e1e1e; overflow-x: auto; flex-shrink: 0; }
   .tab { display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px; color: #666; cursor: pointer; white-space: nowrap; min-width: 80px; max-width: 160px; border-bottom: 2px solid transparent; }
   .tab:hover { color: #aaa; }
   .tab.active { color: #fff; border-bottom: 2px solid #007acc; }
@@ -355,10 +407,12 @@ editorInstance.onDidChangeModelContent(() => {
 
     </div>
   </div>
-{#if contextMenu.visible}
+
+  {#if contextMenu.visible}
     <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px">
       <div class="context-item" onclick={() => { browseTable(contextMenu.tableName); hideContextMenu(); }}>Open</div>
       <div class="context-item" onclick={() => { browseTable(contextMenu.tableName, true); hideContextMenu(); }}>Open in New Tab</div>
     </div>
   {/if}
+
 </div>

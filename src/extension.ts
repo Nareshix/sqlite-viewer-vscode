@@ -10,7 +10,6 @@ class SQLiteEditorProvider implements vscode.CustomReadonlyEditorProvider {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   openCustomDocument(uri: vscode.Uri): vscode.CustomDocument {
-    // VS Code needs a document object — we just need the uri, nothing fancy
     return { uri, dispose: () => {} };
   }
 
@@ -27,41 +26,50 @@ class SQLiteEditorProvider implements vscode.CustomReadonlyEditorProvider {
       localResourceRoots: [webviewDir],
     };
 
-    // Load the Vite-built HTML, inject base href (same as before)
     const htmlPath = path.join(webviewDir.fsPath, 'index.html');
     let html = fs.readFileSync(htmlPath, 'utf8');
     const webviewUri = webviewPanel.webview.asWebviewUri(webviewDir);
     html = html.replace(/(<head.*?>)/i, `$1\n    <base href="${webviewUri}/">`);
     webviewPanel.webview.html = html;
+
     activePanel = webviewPanel;
     webviewPanel.onDidDispose(() => { activePanel = null; });
     webviewPanel.onDidChangeViewState(e => { if (e.webviewPanel.active) activePanel = webviewPanel; });
 
     try {
-      // Open the actual .db file instead of :memory:
       const db = new Database(document.uri.fsPath);
 
-webviewPanel.webview.onDidReceiveMessage(message => {
-  if (message.command === 'runSql') {
-    try {
-      const jsonResult = db.query(message.text);
-      const data = JSON.parse(jsonResult);
-      webviewPanel.webview.postMessage({ command: 'sqlResult', data });
-    } catch (err: any) {
-      webviewPanel.webview.postMessage({ command: 'sqlError', error: err.message });
-    }
-  }
+      webviewPanel.webview.onDidReceiveMessage(message => {
+        // Handle initialization request
+        if (message.command === 'ready') {
+          const saved = this.context.workspaceState.get(document.uri.toString());
+          webviewPanel.webview.postMessage({ command: 'restoreState', state: saved });
+        }
 
-  if (message.command === 'getSchema') {
-    try {
-      const jsonResult = db.schema();
-      const schema = JSON.parse(jsonResult);
-      webviewPanel.webview.postMessage({ command: 'schemaResult', schema });
-    } catch (err: any) {
-      webviewPanel.webview.postMessage({ command: 'sqlError', error: err.message });
-    }
-  }
-});
+        if (message.command === 'runSql') {
+          try {
+            const jsonResult = db.query(message.text);
+            const data = JSON.parse(jsonResult);
+            webviewPanel.webview.postMessage({ command: 'sqlResult', data });
+          } catch (err: any) {
+            webviewPanel.webview.postMessage({ command: 'sqlError', error: err.message });
+          }
+        }
+
+        if (message.command === 'saveState') {
+          this.context.workspaceState.update(document.uri.toString(), message.state);
+        }
+
+        if (message.command === 'getSchema') {
+          try {
+            const jsonResult = db.schema();
+            const schema = JSON.parse(jsonResult);
+            webviewPanel.webview.postMessage({ command: 'schemaResult', schema });
+          } catch (err: any) {
+            webviewPanel.webview.postMessage({ command: 'sqlError', error: err.message });
+          }
+        }
+      });
     } catch (err: any) {
       vscode.window.showErrorMessage(`Failed to open database: ${err.message}`);
     }
@@ -76,9 +84,10 @@ export function activate(context: vscode.ExtensionContext) {
       activePanel?.webview.postMessage({ command: 'runQuery' });
     })
   );
+
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
-      'monaco-hello.sqliteEditor', // must match viewType in package.json
+      'monaco-hello.sqliteEditor',
       provider,
       { webviewOptions: { retainContextWhenHidden: true } }
     )
