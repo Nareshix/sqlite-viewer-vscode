@@ -10,12 +10,13 @@ import * as monaco from 'monaco-editor';
     vscode = { postMessage: () => {} };
   }
 
-  // existing state
-  let results: any[] = $state([]);
-  let columns: string[] = $state([]);
-  let errorMessage: string | null = $state(null);
+type Tab = { id: string; title: string; query: string; results: any[]; columns: string[]; error: string | null; };
+let tabCounter = 1;
+let tabs: Tab[] = $state([{ id: '1', title: 'Query 1', query: '-- Open a table from the sidebar or write a query\n', results: [], columns: [], error: null }]);
+let activeTabId: string = $state('1');
+let activeTab = $derived(tabs.find(t => t.id === activeTabId)!);
+let contextMenu: { visible: boolean; x: number; y: number; tableName: string } = $state({ visible: false, x: 0, y: 0, tableName: '' });
 
-  // sidebar state
   let schema: { tables: any[], views: string[] } = $state({ tables: [], views: [] });
   let expandedTables: Set<string> = $state(new Set());
   let searchQuery: string = $state('');
@@ -47,8 +48,30 @@ import * as monaco from 'monaco-editor';
     const selection = editorInstance.getSelection();
     let text = editorInstance.getModel()?.getValueInRange(selection!) || '';
     if (!text.trim()) text = editorInstance.getValue();
-    errorMessage = null;
+    tabs = tabs.map(t => t.id === activeTabId ? { ...t, error: null } : t);
     vscode.postMessage({ command: 'runSql', text });
+  }
+
+  function switchTab(id: string) {
+    activeTabId = id;
+    const tab = tabs.find(t => t.id === id)!;
+    editorInstance?.setValue(tab.query);
+  }
+
+  function newTab() {
+    tabCounter++;
+    const id = String(tabCounter);
+    tabs = [...tabs, { id, title: `Query ${tabCounter}`, query: '-- Write a query\n', results: [], columns: [], error: null }];
+    switchTab(id);
+  }
+
+  function closeTab(id: string, e: MouseEvent) {
+    e.stopPropagation();
+    const idx = tabs.findIndex(t => t.id === id);
+    tabs = tabs.filter(t => t.id !== id);
+    if (activeTabId === id) {
+      switchTab(tabs[Math.min(idx, tabs.length - 1)].id);
+    }
   }
 
   function toggleTable(name: string) {
@@ -57,11 +80,26 @@ import * as monaco from 'monaco-editor';
     expandedTables = next;
   }
 
-  function browseTable(name: string) {
-    if (editorInstance) {
-      editorInstance.setValue(`SELECT * FROM "${name}" LIMIT 100;`);
-      runQuery();
+  function browseTable(name: string, forceNew = false) {
+    const query = `SELECT * FROM "${name}" LIMIT 100;`;
+    if (!forceNew) {
+      const existing = tabs.find(t => t.title === name);
+      if (existing) { switchTab(existing.id); return; }
     }
+    tabCounter++;
+    const id = String(tabCounter);
+    tabs = [...tabs, { id, title: name, query, results: [], columns: [], error: null }];
+    switchTab(id);
+    setTimeout(() => runQuery(), 0);
+  }
+
+  function showContextMenu(e: MouseEvent, name: string) {
+    e.preventDefault();
+    contextMenu = { visible: true, x: e.clientX, y: e.clientY, tableName: name };
+  }
+
+  function hideContextMenu() {
+    contextMenu = { ...contextMenu, visible: false };
   }
 
   // format row count: 1234 -> 1.2k
@@ -130,19 +168,20 @@ import * as monaco from 'monaco-editor';
     });
 
     editorInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, runQuery);
-
+editorInstance.onDidChangeModelContent(() => {
+      const val = editorInstance!.getValue();
+      tabs = tabs.map(t => t.id === activeTabId ? { ...t, query: val } : t);
+    });
     // request schema immediately on load
     vscode.postMessage({ command: 'getSchema' });
 
     const messageHandler = (event: MessageEvent) => {
       const message = event.data;
       if (message.command === 'sqlResult') {
-        results = message.data || [];
-        columns = results.length > 0 ? Object.keys(results[0]) : [];
+        const data = message.data || [];
+        tabs = tabs.map(t => t.id === activeTabId ? { ...t, results: data, columns: data.length > 0 ? Object.keys(data[0]) : [] } : t);
       } else if (message.command === 'sqlError') {
-        errorMessage = message.error;
-        results = [];
-        columns = [];
+        tabs = tabs.map(t => t.id === activeTabId ? { ...t, error: message.error, results: [], columns: [] } : t);
       } else if (message.command === 'schemaResult') {
         schema = message.schema;
       } else if (message.command === 'runQuery') {
@@ -151,11 +190,15 @@ import * as monaco from 'monaco-editor';
     };
 
     window.addEventListener('message', messageHandler);
+    window.addEventListener('click', hideContextMenu);
+
 
     return () => {
       editorInstance?.dispose();
       sqliteProvider.dispose();
       window.removeEventListener('message', messageHandler);
+            window.removeEventListener('click', hideContextMenu);
+
     };
   });
 </script>
@@ -200,24 +243,50 @@ import * as monaco from 'monaco-editor';
   th { background: #2d2d2d; color: #fff; position: sticky; top: 0; }
   .error { color: #f48771; font-family: monospace; white-space: pre-wrap; padding: 10px; background: rgba(255,0,0,0.1); border: 1px solid #f48771; }
   .empty-state { color: #888; font-style: italic; padding: 10px; }
+ .tab-bar { display: flex; align-items: center; background: #1e1e1e; overflow-x: auto; flex-shrink: 0; }
+  .tab { display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 12px; color: #666; cursor: pointer; white-space: nowrap; min-width: 80px; max-width: 160px; border-bottom: 2px solid transparent; }
+  .tab:hover { color: #aaa; }
+  .tab.active { color: #fff; border-bottom: 2px solid #007acc; }
+  .tab-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  .tab-close { color: #555; font-size: 14px; line-height: 1; padding: 0 2px; border-radius: 2px; }
+  .tab-close:hover { color: #fff; background: #333; }
+  .tab-new { padding: 8px 12px; color: #555; cursor: pointer; font-size: 18px; line-height: 1; }
+  .tab-new:hover { color: #ccc; }
+  .table-open { opacity: 0; font-size: 11px; color: #666; padding: 1px 3px; border-radius: 2px; }
+  .table-row:hover .table-open { opacity: 1; color: #aaa; }
+  .table-open:hover { color: #fff !important; background: #3a3a3a; }
+  .context-menu { position: fixed; background: #2d2d2d; border: 1px solid #444; border-radius: 4px; z-index: 1000; min-width: 140px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  .context-item { padding: 7px 14px; font-size: 12px; color: #ccc; cursor: pointer; }
+  .context-item:hover { background: #007acc; color: #fff; }
 </style>
 
 <div class="layout-container">
 
   <!-- left: editor + results -->
   <div class="main-pane">
+    <div class="tab-bar">
+      {#each tabs as tab}
+        <div class="tab" class:active={tab.id === activeTabId} onclick={() => switchTab(tab.id)}>
+          <span class="tab-title">{tab.title}</span>
+          {#if tabs.length > 1}
+            <span class="tab-close" onclick={(e) => closeTab(tab.id, e)}>×</span>
+          {/if}
+        </div>
+      {/each}
+      <div class="tab-new" onclick={newTab} title="New tab">+</div>
+    </div>
     <div class="editor-pane" bind:this={editorContainer}></div>
     <div class="results-pane">
-      {#if errorMessage}
-        <div class="error">{errorMessage}</div>
-      {:else if results.length > 0}
+      {#if activeTab?.error}
+        <div class="error">{activeTab.error}</div>
+      {:else if activeTab?.results.length > 0}
         <table>
           <thead>
-            <tr>{#each columns as col}<th>{col}</th>{/each}</tr>
+            <tr>{#each activeTab.columns as col}<th>{col}</th>{/each}</tr>
           </thead>
           <tbody>
-            {#each results as row}
-              <tr>{#each columns as col}<td>{row[col] === null ? 'NULL' : row[col]}</td>{/each}</tr>
+            {#each activeTab.results as row}
+              <tr>{#each activeTab.columns as col}<td>{row[col] === null ? 'NULL' : row[col]}</td>{/each}</tr>
             {/each}
           </tbody>
         </table>
@@ -247,12 +316,13 @@ import * as monaco from 'monaco-editor';
         <div
           class="table-row"
           onclick={() => toggleTable(table.name)}
-          ondblclick={() => browseTable(table.name)}
-          title="double-click to browse"
+          oncontextmenu={(e) => showContextMenu(e, table.name)}
+          title="right-click for options"
         >
           <span class="chevron" class:open={expandedTables.has(table.name)}>›</span>
           <span class="table-name">{table.name}</span>
           <span class="table-count">{fmt(table.rowCount)}</span>
+          <span class="table-open" onclick={(e) => { e.stopPropagation(); browseTable(table.name); }} title="Open table">↗</span>
         </div>
 
         {#if expandedTables.has(table.name)}
@@ -285,5 +355,10 @@ import * as monaco from 'monaco-editor';
 
     </div>
   </div>
-
+{#if contextMenu.visible}
+    <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px">
+      <div class="context-item" onclick={() => { browseTable(contextMenu.tableName); hideContextMenu(); }}>Open</div>
+      <div class="context-item" onclick={() => { browseTable(contextMenu.tableName, true); hideContextMenu(); }}>Open in New Tab</div>
+    </div>
+  {/if}
 </div>
