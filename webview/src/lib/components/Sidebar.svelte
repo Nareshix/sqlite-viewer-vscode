@@ -1,6 +1,8 @@
 <script lang="ts">
   import { store } from '../store.svelte';
 
+  let { width = 240 }: { width: number } = $props();
+
   let expandedTables: Set<string> = $state(new Set());
   let searchQuery: string = $state('');
   let searchOpen: boolean = $state(false);
@@ -22,8 +24,8 @@
   }
 
   function fmt(n: number): string {
-    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-    return String(n);
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k rows';
+    return `${n} ${n === 1 ? 'row' : 'rows'}`;
   }
 
   let filteredTables = $derived(
@@ -31,9 +33,21 @@
       t.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
   );
+
+  function shortType(t: string): string {
+  if (!t) return 'ANY';
+  const u = t.toUpperCase();
+  if (u.includes('INTEGER') || u === 'INT') return 'INT';
+  if (u.includes('VARCHAR') || u.includes('CHAR') || u === 'TEXT') return 'TEXT';
+  if (u.includes('REAL') || u.includes('FLOAT') || u.includes('DOUBLE')) return 'REAL';
+  if (u.includes('BOOLEAN') || u.includes('BOOL')) return 'BOOL';
+  if (u.includes('NUMERIC') || u.includes('DECIMAL')) return 'NUM';
+  if (u.includes('BLOB')) return 'BLOB';
+  return t;
+}
 </script>
 
-<div class="w-[240px] min-w-[240px] bg-[#1e1e1e] border-l border-[#333] flex flex-col overflow-hidden">
+<div style="width: {width}px; min-width: {width}px" class="bg-[#1e1e1e] border-l border-[#333] flex flex-col overflow-hidden">
   <div class="flex-1 overflow-y-auto py-2">
     <!-- Tables Header -->
     <div class="px-3 py-1 text-[11px] font-semibold text-[#888] tracking-wider uppercase flex justify-between items-center">
@@ -85,33 +99,26 @@
       {#if expandedTables.has(table.name)}
         <div class="pl-7 pb-1">
           {#each table.columns as col}
-            <div class="flex items-center gap-1.5 px-2 py-0.5 text-[11px] text-[#888]">
+            <div class="flex flex-wrap items-center gap-1 px-2 py-0.5 text-[11px] text-[#888]">
               {#if col.pk > 0}
-                <span class="bg-[#2d4a1e] text-[#7ec850] text-[9px] px-1 py-[1px] rounded-[2px] font-semibold">PK</span>
+                <span class="bg-[#2d4a1e] text-[#7ec850] text-[9px] px-1 py-[1px] rounded-[2px] font-semibold shrink-0">PK</span>
+              {/if}
+              {#if col.fk}
+                <span class="bg-[#1e3347] text-[#4ec9b0] text-[9px] px-1 py-[1px] rounded-[2px] font-semibold shrink-0">FK → {col.fk.table}({col.fk.to})</span>
               {/if}
               <span class="text-[#bbb]">{col.name}</span>
-              <span class="text-[#666] font-mono">{col.type || 'ANY'}</span>
-              {#if col.notnull === 0 && col.pk === 0}
-                <span class="bg-[#333] text-[#888] text-[9px] px-1 py-[1px] rounded-[2px] font-semibold">null</span>
+              <span class="text-[#666] font-mono">{shortType(col.type)}</span>
+                         {#if col.pk === 0}
+                {#if col.notnull === 1}
+                  <span class="bg-[#2d2d1e] text-[#d7ba7d] text-[9px] px-1 py-[1px] rounded-[2px] font-semibold shrink-0">not null</span>
+                {:else}
+                  <span class="bg-[#333] text-[#888] text-[9px] px-1 py-[1px] rounded-[2px] font-semibold shrink-0">null</span>
+                {/if}
               {/if}
             </div>
           {/each}
         </div>
       {/if}
     {/each}
-
-    <!-- Views -->
-    {#if store.schema.views.length > 0}
-      <div class="px-3 py-1 text-[11px] font-semibold text-[#888] tracking-wider uppercase mt-3">
-        Views <span class="text-[#555]">{store.schema.views.length}</span>
-      </div>
-      {#each store.schema.views as view}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="px-3 py-1 text-[13px] text-[#9cdcfe] cursor-pointer hover:bg-[#2a2d2e]"
-          ondblclick={() => store.browseTable(view)}
-        >{view}</div>
-      {/each}
-    {/if}
   </div>
 </div>

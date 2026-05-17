@@ -3,6 +3,8 @@
   import * as monaco from 'monaco-editor';
   import { store, vscode } from '../store.svelte';
 
+  let { height = null }: { height: number | null } = $props();
+
   let editorContainer: HTMLDivElement;
   let editorInstance: monaco.editor.IStandaloneCodeEditor | null = null;
 
@@ -30,17 +32,14 @@
     let text = editorInstance.getModel()?.getValueInRange(selection!) || '';
     if (!text.trim()) text = editorInstance.getValue();
 
-    // Clear error
     const tab = store.activeTab;
     if (tab) tab.error = null;
 
     vscode.postMessage({ command: 'runSql', text });
   }
 
-  // Register so it can be called from outside (like context menus or VS Code shortcuts)
   store.executeRunQuery = runQuery;
 
-  // Reactively sync activeTab contents to the editor
   $effect(() => {
     if (editorInstance && store.activeTabId) {
       const currentTab = store.activeTab;
@@ -110,4 +109,8 @@
   });
 </script>
 
-<div class="flex-1 min-h-0 relative" bind:this={editorContainer}></div>
+<div
+  bind:this={editorContainer}
+  style={height !== null ? `height: ${height}px` : ''}
+  class={height !== null ? 'relative shrink-0' : 'flex-1 min-h-0 relative'}
+></div>

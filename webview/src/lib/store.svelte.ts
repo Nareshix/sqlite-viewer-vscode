@@ -1,4 +1,3 @@
-    // src/lib/store.svelte.ts
 
 declare function acquireVsCodeApi(): any;
 

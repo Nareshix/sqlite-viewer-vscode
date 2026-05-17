@@ -2,7 +2,8 @@
   import { store } from '../store.svelte';
 </script>
 
-<div class="flex-1 bg-[#1e1e1e] border-t border-[#444] overflow-auto p-2.5 flex flex-col">
+<!-- Added 'min-h-0' so this div can flex below its intrinsic table height smoothly! -->
+<div class="flex-1 min-h-0 bg-[#1e1e1e] border-t border-[#444] overflow-auto p-2.5 flex flex-col">
   {#if store.activeTab?.error}
     <div class="text-[#f48771] font-mono whitespace-pre-wrap p-2.5 bg-red-500/10 border border-[#f48771]">
       {store.activeTab.error}
